@@ -25,7 +25,7 @@ class MiddlewareControl implements EventSubscriberInterface {
 
     $request = $event->getRequest();
 
-    [$route, ,] = $this->getCurrentRoute($request, false);
+    [$route, ,] = $this->getCurrentRoute($request);
 
     if (!$route) return;
 

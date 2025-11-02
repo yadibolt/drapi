@@ -10,6 +10,7 @@ use Drupal\drapi\Core\Http\Reply;
 use Drupal\drapi\Core\Session\Enum\SubjectIntent;
 use Drupal\drapi\Core\Session\Session;
 use Drupal\drapi\Core\Session\Subject;
+use Drupal\drapi\Core\Http\Route\Route;
 use Drupal\drapi\EventSubscriber\Trait\RouteTrait;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\HttpFoundation\ResponseHeaderBag;
@@ -43,21 +44,22 @@ class CacheControl implements EventSubscriberInterface{
 
       $cache = Cache::make();
       $cacheIdentifier = $request->getRequestUri();
+      $langcode = $request->headers->get('Accept-Language', 'en');
 
       // 1. with adder
       // with adder, additional checks run before it can be accessed
       if (!empty($userToken)) $cacheIdentifier .= ROUTE_CACHE_TOKEN_ADDER_DEFAULT . $userToken;
-      $cacheHit = $cache->get($cacheIdentifier, CacheIntent::URL);
+      $cacheHit = $cache->get($cacheIdentifier, CacheIntent::URL, $langcode);
 
       // 2. without adder - default uri with query params
       if (empty($cacheHit)) {
         $cacheIdentifier = $request->getRequestUri();
-        $cacheHit = $cache->get($cacheIdentifier, CacheIntent::URL);
+        $cacheHit = $cache->get($cacheIdentifier, CacheIntent::URL, $langcode);
 
         // since the adder is not present, this has to be public GET route
         // therefore we can return the cache hit directly
         if (!empty($cacheHit)) {
-          $cacheHit = $this->createCachedResponse($cache, $cacheIdentifier, $cacheHit);
+          $cacheHit = $this->createCachedResponse($cache, $cacheIdentifier, $cacheHit, null);
           if ($cacheHit === null) return;
 
           $event->setResponse(
@@ -69,16 +71,17 @@ class CacheControl implements EventSubscriberInterface{
 
       if (empty($cacheHit)) return;
 
+      /** @var Route $route */
       [$route, $configuration] = $this->getCurrentRoute($request);
 
       if (empty($route)) return;
 
-      $rolesEmpty = empty($route['roles']);
-      $permissionsEmpty = empty($route['permissions']) || ((count($route['permissions']) === 1) && $route['permissions'][0] === 'access content');
-      $middlewareEmpty = empty($route['useMiddleware']) || !in_array(AuthMiddleware::getId(), $route['use_middleware']);
+      $rolesEmpty = empty($route->getRoles());
+      $permissionsEmpty = empty($route->getPermissions()) || ((count($route->getPermissions()) === 1) && $route->getPermissions()[0] === 'access content');
+      $middlewareEmpty = empty($route->getUseMiddleware()) || !in_array(AuthMiddleware::getId(), $route->getUseMiddleware());
 
       if ($rolesEmpty && $permissionsEmpty && $middlewareEmpty) {
-        $cacheHit = $this->createCachedResponse($cache, $cacheIdentifier, $cacheHit);
+        $cacheHit = $this->createCachedResponse($cache, $cacheIdentifier, $cacheHit, $route);
         if ($cacheHit === null) return;
 
         $event->setResponse(
@@ -86,22 +89,24 @@ class CacheControl implements EventSubscriberInterface{
         );
         $event->stopPropagation();
       } else {
-        if (empty($userToken)) return;
+        $subject = Subject::makeAnonymous();
+        if (!empty($userToken)) {
+          $checked = JWT::check($userToken);
+          if (!$checked->isValid() || $checked->isExpired() || $checked->hasError()) return;
 
-        $checked = JWT::check($userToken);
-        if (!$checked->isValid() || $checked->isExpired() || $checked->hasError()) return;
+          $payload = JWT::payloadFrom($userToken);
+          if (!$this->checkPayload($payload)) return;
 
-        $payload = JWT::payloadFrom($userToken);
-        if (!$this->checkPayload($payload)) return;
+          if ($payload['data']['type'] === SubjectIntent::ANONYMOUS) return;
 
-        if ($payload['data']['type'] === SubjectIntent::ANONYMOUS) return;
+          $subject = Session::make($userToken)->find()?->getSubject();
+          if (!$subject) return;
+          if (!$subject->isActive()) return;
+        }
 
-        $subject = Session::make($userToken)->find()?->getSubject();
-        if (!$subject) return;
-        if (!$subject->isActive()) return;
         if (!$this->checkRequirements($subject, $route)) return;
 
-        $cacheHit = $this->createCachedResponse($cache, $cacheIdentifier, $cacheHit);
+        $cacheHit = $this->createCachedResponse($cache, $cacheIdentifier, $cacheHit, $route);
         if ($cacheHit === null) return;
 
         $event->setResponse(
@@ -122,9 +127,9 @@ class CacheControl implements EventSubscriberInterface{
 
     return $headers;
   }
-  protected function checkRequirements(Subject $subject, array $route): bool {
-    $routePermissions = $route['permissions'] ?? [];
-    $routeRoles = $route['roles'] ?? [];
+  protected function checkRequirements(Subject $subject, Route $route): bool {
+    $routePermissions = $route->getPermissions() ?? [];
+    $routeRoles = $route->getRoles() ?? [];
 
     $permissions = $subject->getPermissions();
     if (array_any($routePermissions,fn($routePermission) => !in_array($routePermission, $permissions))) {
@@ -152,15 +157,20 @@ class CacheControl implements EventSubscriberInterface{
 
     return true;
   }
-  protected function createCachedResponse(Cache $cache, string $cacheIdentifier, array $cacheHit): ?array {
+  protected function createCachedResponse(Cache $cache, string $cacheIdentifier, array $cacheHit, ?Route $route): ?array {
     if ($cacheHit['headers_replaced'] === false) {
+      $langcode = 'en';
+
       if ($cacheHit['headers'] instanceof ResponseHeaderBag) {
+        $langcode = $cacheHit['headers']->get('Content-Language') ?? 'en';
         $cacheHit['headers'] = $this->getCachedHeaders($cacheHit['headers'], $cache->getCacheDuration());
       }
 
       $cacheTags = [];
-      if (!empty($this->route['cache_tags']) && is_array($this->route['cache_tags'])) {
-        $cacheTags = $this->route['cache_tags'] ?? [];
+      if ($route) {
+        if (!empty($route->getCacheTags()) && is_array($route->getCacheTags())) {
+          $cacheTags = $route->getCacheTags() ?? [];
+        }
       }
 
       if (is_string($cacheHit['data']) && json_validate($cacheHit['data'])) {
@@ -172,7 +182,7 @@ class CacheControl implements EventSubscriberInterface{
 
       if (is_array($cacheHit['data'])) $cacheHit['data'] = json_encode($cacheHit['data']);
 
-      $cache->create($cacheIdentifier, CacheIntent::URL, $cacheHit, $cacheTags);
+      $cache->create($cacheIdentifier, CacheIntent::URL, $cacheHit, $cacheTags, $langcode);
 
       return $cacheHit;
     }

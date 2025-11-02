@@ -12,8 +12,8 @@ class Route extends RouteBase {
   /**
    * @throws Exception
    */
-  public static function make(string $id, string $name, string $method, string $description, string $path, array $permissions, array $roles, array $useMiddleware, bool $useCache, string $filePath = ''): self {
-    return new self($id, $name, $method, $description, $path, $permissions, $roles, $useMiddleware, $useCache, $filePath);
+  public static function make(string $id, string $name, string $method, string $description, string $path, array $permissions, array $roles, array $useMiddleware, bool $useCache, array $cacheTags = [], string $filePath = ''): self {
+    return new self($id, $name, $method, $description, $path, $permissions, $roles, $useMiddleware, $useCache, $cacheTags, $filePath);
   }
   public static function fromAttributes(string $filePath): ?self {
     $attributes = self::getFileAttributes($filePath);
@@ -35,6 +35,7 @@ class Route extends RouteBase {
         roles: $args['roles'] ?? [],
         useMiddleware: $args['useMiddleware'] ?? [],
         useCache: $args['useCache'] ?? false,
+        cacheTags: [], // cache tags are later set with RouteHandler function setCacheTags()
         filePath: $filePath
       );
     } catch (Exception $e) {

@@ -2,6 +2,7 @@
 
 namespace Drupal\drapi\Core\Http\Base;
 
+use Drupal;
 use Drupal\drapi\Core\Cache\Cache;
 use Drupal\drapi\Core\Cache\Enum\CacheIntent;
 use Drupal\drapi\Core\Http\Middleware\AuthMiddleware;
@@ -9,6 +10,7 @@ use Drupal\drapi\Core\Http\Route\Route;
 use Drupal\drapi\Core\Http\Trait\RequestTrait;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\ResponseHeaderBag;
+use SYmfony\Component\HttpFoundation\Request;
 
 abstract class ReplyBase extends Response {
   use RequestTrait;
@@ -19,6 +21,7 @@ abstract class ReplyBase extends Response {
   protected array|string $data = [];
   protected bool $responseCached = false;
   protected bool $responseCacheable = false;
+  protected string $langcode = 'en';
   protected Route $route;
 
   public function __construct(array|string $data, int $status = 200, array|ResponseHeaderBag $headers = []) {
@@ -41,6 +44,10 @@ abstract class ReplyBase extends Response {
     // so we return here.
     if ($this->responseCached) return;
 
+    $request = $this->getCurrentRequest();
+    $requestMethod = $request->getMethod();
+
+    $this->setLangcode($request);
     $this->setRoute();
     $this->setResponseCacheable();
     $this->setHeaders();
@@ -51,12 +58,10 @@ abstract class ReplyBase extends Response {
 
     // if the response is cacheable, we create a new cache record here.
     // caching responses is limited to GET requests only, with non-error status codes.
-    $request = $this->getCurrentRequest();
-    $requestMethod = $request->getMethod();
     if (strtolower($requestMethod) === 'get' && $this->responseCacheable && $status < 400) {
       $cacheTags = [];
       $userToken = '';
-      $usesAuthorizationMiddleware = !empty($this->route['use_middleware']) && in_array(AuthMiddleware::getId(), $this->route['use_middleware']);
+      $usesAuthorizationMiddleware = !empty($this->route->getUseMiddleware()) && in_array(AuthMiddleware::getId(), $this->route->getUseMiddleware());
 
       if ($usesAuthorizationMiddleware) {
         $authorizationHeader = $request->headers->get('authorization');
@@ -65,8 +70,8 @@ abstract class ReplyBase extends Response {
         }
       }
 
-      if (!empty($this->route['cache_tags']) && is_array($this->route['cache_tags'])) {
-        $cacheTags = $this->route['cache_tags'] ?? [];
+      if (!empty($this->route->getCacheTags()) && is_array($this->route->getCacheTags())) {
+        $cacheTags = $this->route->getCacheTags() ?? [];
       }
 
       $cacheIdentifier = $request->getRequestUri();
@@ -78,7 +83,7 @@ abstract class ReplyBase extends Response {
         'headers' => $this->headers,
          // used to control the cache flow. if false, the subscriber will replace the headers with the cached ones.
         'headers_replaced' => false,
-      ], $cacheTags);
+      ], $cacheTags, $this->getLangcode());
     }
   }
   protected function structData(string|array $data): string {
@@ -110,6 +115,7 @@ abstract class ReplyBase extends Response {
   }
   protected function setHeaders(): void {
     $this->headers->set('Content-Type', 'application/json');
+    $this->headers->set('Content-Language', $this->getLangcode());
 
     // cache hit
     if ($this->responseCached) {
@@ -144,8 +150,25 @@ abstract class ReplyBase extends Response {
     if (empty($this->route)) return;
     $this->responseCacheable = $this->route->getUseCache() ?? false;
   }
+  protected function setLangcode(Request $request): void {
+    $langcode = $request->headers->get('Accept-Language', 'en');
 
+    if (strlen($langcode) > 2) {
+      $langcode = strtolower(substr($langcode, 0, 2));
+    }
+
+    $languages = Drupal::languageManager()->getLanguages();
+    if (isset($languages[$langcode])) {
+      $this->langcode = $langcode;
+      return;
+    }
+
+    $this->langcode = 'en';
+  }
   protected function getRoute(): Route {
     return $this->route;
+  }
+  protected function getLangcode(): string {
+    return $this->langcode;
   }
 }

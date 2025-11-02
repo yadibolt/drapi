@@ -11,14 +11,12 @@ trait RouteTrait {
   /**
    * @return array{0: Route|null, 1: Config}
    */
-  public function getCurrentRoute(Request $request, bool $withQueryParams = true): array {
+  public function getCurrentRoute(Request $request): array {
     $configuration = Drupal::configFactory()->get(ROUTE_CONFIG_NAME_DEFAULT);
     $routeRegistry = $configuration->get('route_registry') ?? [];
 
     $uri = ltrim($request->getRequestUri(), '/');
-    if (!$withQueryParams) {
-      $uri = explode('?', $uri)[0];
-    }
+    $uri = explode('?', $uri)[0];
 
     $uriParts = mb_split('/', $uri);
 

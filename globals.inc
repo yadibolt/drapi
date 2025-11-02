@@ -9,7 +9,7 @@ const LOGGER_LEVEL_DEFAULT = 'debug';
 
 const CACHE_BIN_KEY_DEFAULT = 'drapi';
 const CACHE_TAGS_BIN_KEY_DEFAULT = 'drapi_cache_tags';
-const CACHE_DURATION_DEFAULT = 60;
+const CACHE_DURATION_DEFAULT = 3600;
 
 const JWT_CONFIG_NAME_DEFAULT = 'drapi.jwt_config';
 const JWT_SECRET_DEFAULT = 'change_me_please';

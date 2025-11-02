@@ -28,16 +28,16 @@ abstract class CacheBase {
     }
   }
 
-  public function get(string $key, CacheIntent $intent): mixed {
-    $key = $this->makeKey($key, $intent);
+  public function get(string $key, CacheIntent $intent, string $langcode = 'en'): mixed {
+    $key = $this->makeKey($key, $intent, $langcode);
 
     $record = Drupal::cache($this->binKey)->get($key);
     if (empty($record) || empty($record->data)) return null;
 
     return unserialize($record->data);
   }
-  public function create(string $key, CacheIntent $intent, mixed $data, array $tags = []): bool {
-    $key = $this->makeKey($key, $intent);
+  public function create(string $key, CacheIntent $intent, mixed $data, array $tags = [], string $langcode = 'en'): bool {
+    $key = $this->makeKey($key, $intent, $langcode);
 
     if ($this->exists($key)) return false;
     $data = serialize($data);
@@ -55,8 +55,8 @@ abstract class CacheBase {
 
     return true;
   }
-  public function delete(string $key, CacheIntent $intent): void {
-    $key = $this->makeKey($key, $intent);
+  public function delete(string $key, CacheIntent $intent, string $langcode = 'en'): void {
+    $key = $this->makeKey($key, $intent, $langcode);
     Drupal::cache($this->binKey)->delete($key);
   }
   public function flush(): void {
@@ -137,8 +137,8 @@ abstract class CacheBase {
     return !empty($record);
   }
 
-  protected function makeKey(string $key, CacheIntent $intent): string {
-    return "{$this->binKey}_{$intent->value}:$key";
+  protected function makeKey(string $key, CacheIntent $intent, string $langcode): string {
+    return "{$this->binKey}_{$intent->value}:$key:$langcode";
   }
 
   protected function getCacheDurationTimestamp(): int {

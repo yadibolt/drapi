@@ -2,6 +2,7 @@
 
 namespace Drupal\drapi\Core\Http\Route\Base;
 
+use Drupal;
 use Drupal\drapi\Core\Content\Trait\FileTrait;
 use Drupal\drapi\Core\Http\Route\Asserters\RouteClassAsserter;
 use Drupal\drapi\Core\Http\Route\Asserters\RouteExtendsAsserter;
@@ -38,6 +39,7 @@ abstract class RouteBase {
   protected array $roles;
   protected array $useMiddleware;
   protected bool $useCache;
+  protected array $cacheTags;
   protected bool $enabled;
   protected string $filePath;
   //
@@ -52,7 +54,7 @@ abstract class RouteBase {
   /**
    * @throws Exception
    */
-  public function __construct(string $id, string $name, string $method, string $description, string $path, array $permissions, array $roles, array $useMiddleware, bool $useCache, string $filePath = '') {
+  public function __construct(string $id, string $name, string $method, string $description, string $path, array $permissions, array $roles, array $useMiddleware, bool $useCache, array $cacheTags = [], string $filePath = '') {
     $this->id = $id;
     $this->name = $name;
     $this->method = $method;
@@ -62,6 +64,7 @@ abstract class RouteBase {
     $this->roles = $roles;
     $this->useMiddleware = $useMiddleware;
     $this->useCache = $useCache;
+    $this->cacheTags = $cacheTags;
     $this->enabled = true;
     $this->filePath = $filePath;
     $this->classNamespace = $this->_getClassNamespace();
@@ -122,6 +125,7 @@ abstract class RouteBase {
       'roles' => $this->roles,
       'use_middleware' => $this->useMiddleware,
       'use_cache' => $this->useCache,
+      'cache_tags' => $this->cacheTags,
       'enabled' => $this->enabled,
       'class_namespace' => $this->classNamespace,
       'class_namespace_name' => $this->classNamespaceName,
@@ -190,6 +194,9 @@ abstract class RouteBase {
   public function getUseCache(): bool {
     return $this->useCache;
   }
+  public function getCacheTags(): array {
+    return $this->cacheTags ?? [];
+  }
   public function isEnabled(): bool {
     return $this->enabled;
   }
@@ -256,6 +263,10 @@ abstract class RouteBase {
   }
   public function setEnabled(bool $enabled): self {
     $this->enabled = $enabled;
+    return $this;
+  }
+  public function setCacheTags(array $cacheTags): self {
+    $this->cacheTags = $cacheTags;
     return $this;
   }
   public function setFilePath(string $filePath): self {

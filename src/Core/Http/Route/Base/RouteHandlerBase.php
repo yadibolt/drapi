@@ -3,6 +3,7 @@
 namespace Drupal\drapi\Core\Http\Route\Base;
 
 use Drupal;
+use Drupal\drapi\Core\Http\Route\Route;
 use Drupal\drapi\Core\Http\Reply;
 use Drupal\drapi\Core\Http\Route\Interface\RouteHandlerInterface;
 use Symfony\Component\HttpFoundation\Request;
@@ -15,6 +16,7 @@ abstract class RouteHandlerBase implements RouteHandlerInterface {
   protected string $userAgent = 'unknown';
   protected string $clientIp = '';
   protected array $queryParams = [];
+  protected string $language = 'en';
   protected array $data = [];
   protected array $files = [];
 
@@ -28,6 +30,7 @@ abstract class RouteHandlerBase implements RouteHandlerInterface {
     $this->routeId = $request->attributes->get('_route');
     $this->context = $request->attributes->get('context', []);
     $this->userAgent = $request->headers->get('User-Agent', 'unknown');
+    $this->language = $this->getRequestLangcode();
     $this->clientIp = $request->getClientIp() ?? '';
     $this->queryParams = $request->query->all();
 
@@ -47,11 +50,18 @@ abstract class RouteHandlerBase implements RouteHandlerInterface {
     $routeRegistry = $configuration->get('route_registry') ?: [];
 
     if (!$this->routeId) return;
-    if (!isset($routeRegistry[$this->routeId])) return;
 
-    $currentCacheTags = $routeRegistry[$this->routeId]['cache_tags'] ?? [];
+    $currentRoute = $routeRegistry[$this->routeId] ?? null;
+    $currentRoute = unserialize($currentRoute);
+    if (!isset($currentRoute)) return;
+
+    /** @var Route $currentRoute */
+    $currentCacheTags = $currentRoute->getCacheTags() ?? [];
     $mergedTags = array_unique(array_merge($currentCacheTags, $tags));
-    $routeRegistry[$this->routeId]['cache_tags'] = $mergedTags;
+
+    $currentRoute->setCacheTags($mergedTags);
+    $routeRegistry[$this->routeId] = serialize($currentRoute);
+    
     $this->cacheTags = $mergedTags;
 
     $configuration->set('route_registry', $routeRegistry);
