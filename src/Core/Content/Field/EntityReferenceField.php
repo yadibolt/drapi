@@ -59,7 +59,7 @@ class EntityReferenceField extends FieldBase implements FieldInterface {
         'load_custom' => $this->getLoadCustom(),
         'load_protected' => $this->getLoadProtected(),
         'strip_field_prefixes' => $this->getStripFieldPrefixes(),
-      ])->resolve();
+      ])->resolve(1);
     }
 
     return $result;

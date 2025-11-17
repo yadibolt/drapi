@@ -74,7 +74,7 @@ class FieldResolver {
     return $instance;
   }
 
-  public function resolve(): array {
+  public function resolve($depth = 0): array {
     if (empty($this->fields)) return [];
 
     $resolved = [];
@@ -97,7 +97,7 @@ class FieldResolver {
       }
 
       $resolved[$strippedFieldName] = new $handler($field)->getFieldValues([
-        'load_entities' => $this->getLoadEntities(),
+        'load_entities' => !($depth > 0) && $this->getLoadEntities(),
         'load_custom' => $this->getLoadCustom(),
         'load_protected' => $this->getLoadProtected(),
         'strip_field_prefixes' => $this->getStripFieldPrefixes(),
